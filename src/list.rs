@@ -13,7 +13,7 @@ use super::version::Version;
 use super::Args;
 
 pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<()> {
-    let temp_data = Contents::from_temp_file(args)?.unwrap();
+    let temp_data = Contents::from_temp_file(args.path)?.unwrap();
     let adata = match Contents::from_list_file(cwd)? {
         Some(mut data) => {
             temp_data
@@ -40,9 +40,11 @@ pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<()> {
     let adata = adata.prepare_data()?;
     let _ = std::fs::write(LIST_FILENAME, adata.join("\n"));
 
-    let mut ctx = ClipboardContext::new().unwrap();
-    ctx.set_contents(adata[..adata.len() - 1].join("\n").trim_end().to_owned())
-        .unwrap();
+    if !args.noclip {
+        let mut ctx = ClipboardContext::new().unwrap();
+        ctx.set_contents(adata[..adata.len() - 1].join("\n").trim_end().to_owned())
+            .unwrap();
+    }
 
     Ok(())
 }
@@ -64,11 +66,11 @@ struct Contents {
 
 impl Contents {
     /// Parse temp file from total commander
-    fn from_temp_file(args: Args) -> Result<Option<Contents>> {
-        if !args.path.contains(".tmp") {
+    fn from_temp_file(path: String) -> Result<Option<Contents>> {
+        if !path.contains(".tmp") {
             return Ok(None);
         }
-        let temp_file_contents = open_file(&args.path, encoding_rs::UTF_16LE)?;
+        let temp_file_contents = open_file(&path, encoding_rs::UTF_16LE)?;
         if temp_file_contents.is_empty() {
             return Ok(None);
         }

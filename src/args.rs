@@ -1,25 +1,21 @@
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Default)]
 pub(crate) enum Mode {
+    #[default]
     None,
     List,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Args {
     pub path: String,
     pub mode: Mode,
+    /// Ignore copy to clipboard
+    pub noclip: bool,
 }
 
 impl Args {
-    const fn new() -> Self {
-        Self {
-            path: String::new(),
-            mode: Mode::None,
-        }
-    }
-
     pub(crate) fn parse(mut args: impl DoubleEndedIterator<Item = String>) -> Self {
-        let mut output = Self::new();
+        let mut output = Self::default();
 
         let last = match args.nth_back(0) {
             Some(a) if !a.contains('-') => a,
@@ -54,6 +50,9 @@ impl Args {
                     "list" => {
                         output.mode = Mode::List;
                     }
+                    "ignore-clipboard" => {
+                        output.noclip = true;
+                    }
                     _ => {}
                 };
             }
@@ -81,10 +80,12 @@ mod test {
         let ex1 = Args {
             path: path.clone(),
             mode: Mode::List,
+            ..Default::default()
         };
         let ex2 = Args {
             path: path.clone(),
             mode: Mode::None,
+            ..Default::default()
         };
 
         assert_eq!(ex1, Args::parse(into_args(&["--list", "--path", "./file"])));
