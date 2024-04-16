@@ -9,8 +9,7 @@ pub(crate) enum Mode {
 pub(crate) struct Args {
     pub path: String,
     pub mode: Mode,
-    /// Ignore copy to clipboard
-    pub noclip: bool,
+    pub ignore_clipboard: bool,
 }
 
 impl Args {
@@ -51,7 +50,7 @@ impl Args {
                         output.mode = Mode::List;
                     }
                     "ignore-clipboard" => {
-                        output.noclip = true;
+                        output.ignore_clipboard = true;
                     }
                     _ => {}
                 };

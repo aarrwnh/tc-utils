@@ -1,12 +1,15 @@
 extern crate chrono;
 use chrono::Local;
 
-extern crate copypasta;
-use copypasta::{ClipboardContext, ClipboardProvider};
+extern crate clipboard_win;
+use clipboard_win::{formats, set_clipboard};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::{io::Result, path::Path};
+use std::{
+    io::{ErrorKind, Result},
+    path::Path,
+};
 
 use super::open_file;
 use super::version::Version;
@@ -40,10 +43,9 @@ pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<()> {
     let adata = adata.prepare_data()?;
     let _ = std::fs::write(LIST_FILENAME, adata.join("\n"));
 
-    if !args.noclip {
-        let mut ctx = ClipboardContext::new().unwrap();
-        ctx.set_contents(adata[..adata.len() - 1].join("\n").trim_end().to_owned())
-            .unwrap();
+    if !args.ignore_clipboard {
+        let text = adata[..adata.len() - 1].join("\n").trim_end().to_owned();
+        set_clipboard(formats::Unicode, text).expect("To set clipboard");
     }
 
     Ok(())
@@ -66,13 +68,13 @@ struct Contents {
 
 impl Contents {
     /// Parse temp file from total commander
-    fn from_temp_file(path: String) -> Result<Option<Contents>> {
+    fn from_temp_file(path: String) -> Result<Option<Self>> {
         if !path.contains(".tmp") {
-            return Ok(None);
+            return Err(ErrorKind::NotFound.into());
         }
         let temp_file_contents = open_file(&path, encoding_rs::UTF_16LE)?;
         if temp_file_contents.is_empty() {
-            return Ok(None);
+            return Err(ErrorKind::UnexpectedEof.into());
         }
         let folder_name = temp_file_contents
             .first()
@@ -104,18 +106,17 @@ impl Contents {
                     set.push(subtitle);
                 }
                 None => {
-                    let set = Vec::from([subtitle]);
-                    data.insert(key, set);
+                    data.insert(key, Vec::from([subtitle]));
                 }
             };
         });
         Ok(Some(Self {
-            title: folder_name.to_str().unwrap().to_string(),
+            title: folder_name.to_str().unwrap().into(),
             data,
         }))
     }
 
-    fn from_list_file(path: PathBuf) -> Result<Option<Contents>> {
+    fn from_list_file(path: PathBuf) -> Result<Option<Self>> {
         let mut path = path.clone();
         path.push(LIST_FILENAME);
         let path = path.to_str().expect("");
@@ -125,7 +126,7 @@ impl Contents {
             return Ok(None);
         }
 
-        let mut contents = Contents {
+        let mut contents = Self {
             title: file_contents.first().expect("title line").to_string(),
             ..Default::default()
         };
@@ -143,7 +144,7 @@ impl Contents {
             });
 
         for line in &file_contents[2..end_offset] {
-            if line == "list.txt" || line.trim_matches(trim_left).is_empty() {
+            if line == LIST_FILENAME || line.trim_matches(trim_left).is_empty() {
                 continue;
             }
 
