@@ -41,7 +41,7 @@ pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<()> {
     };
 
     let adata = adata.prepare_data()?;
-    let _ = std::fs::write(LIST_FILENAME, adata.join("\n"));
+    std::fs::write(LIST_FILENAME, adata.join("\n")).unwrap();
 
     if !args.ignore_clipboard {
         let text = adata[..adata.len() - 1].join("\n").trim_end().to_owned();
@@ -143,19 +143,51 @@ impl Contents {
                 0
             });
 
-        for line in &file_contents[2..end_offset] {
+        let mut i = 2;
+        while i < end_offset {
+            let mut line = &file_contents[i];
+            i += 1;
+
             if line == LIST_FILENAME || line.trim_matches(trim_left).is_empty() {
                 continue;
             }
 
             if line.starts_with(' ') || line.starts_with('\t') {
                 if let Some(list) = contents.data.get_mut(key) {
-                    list.push(line.trim_matches(trim_left).to_string());
+                    loop {
+                        let trimmed_line = line.trim_matches(trim_left);
+                        if trimmed_line.is_empty() {
+                            break;
+                        }
+                        if !list.contains(&trimmed_line.to_string()) {
+                            list.push(trimmed_line.into());
+                        }
+                        i += 1;
+                        line = &file_contents[i];
+                    }
                 }
             } else {
                 key = &line;
-                contents.data.insert(key.to_string(), Vec::new());
+                contents.data.entry(key.into()).or_default();
             }
+        }
+
+        let mut stray_lines = Vec::new();
+        for key in contents.data.to_owned().keys() {
+            if let Some(val) = contents.data.get(key) {
+                if val.is_empty() {
+                    stray_lines.push(key.to_string());
+                    contents.data.remove_entry(key);
+                }
+            }
+        }
+
+        if !stray_lines.is_empty() {
+            contents
+                .data
+                .entry("<>".into())
+                .or_default()
+                .extend(stray_lines);
         }
 
         Ok(Some(contents))

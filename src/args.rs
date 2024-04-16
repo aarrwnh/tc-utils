@@ -49,7 +49,7 @@ impl Args {
                     "list" => {
                         output.mode = Mode::List;
                     }
-                    "ignore-clipboard" => {
+                    "c" | "ignore-clipboard" => {
                         output.ignore_clipboard = true;
                     }
                     _ => {}
@@ -79,7 +79,7 @@ mod test {
         let ex1 = Args {
             path: path.clone(),
             mode: Mode::List,
-            ..Default::default()
+            ignore_clipboard: true,
         };
         let ex2 = Args {
             path: path.clone(),
@@ -87,8 +87,8 @@ mod test {
             ..Default::default()
         };
 
-        assert_eq!(ex1, Args::parse(into_args(&["--list", "--path", "./file"])));
-        assert_eq!(ex1, Args::parse(into_args(&["--list", "./file"])));
+        assert_eq!(ex1, Args::parse(into_args(&["--ignore-clipboard", "--list", "--path", "./file"])));
+        assert_eq!(ex1, Args::parse(into_args(&["-c", "--list", "./file"])));
         assert_eq!(ex2, Args::parse(into_args(&["./file"])));
     }
 }
