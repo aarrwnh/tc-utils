@@ -5,9 +5,10 @@ extern crate clipboard_win;
 use clipboard_win::{formats, set_clipboard};
 
 use std::collections::HashMap;
+use std::ops::{AddAssign, SubAssign};
 use std::path::PathBuf;
 use std::{
-    io::{ErrorKind, Result},
+    io::{Error, ErrorKind},
     path::Path,
 };
 
@@ -15,7 +16,7 @@ use super::open_file;
 use super::version::Version;
 use super::Args;
 
-pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<()> {
+pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<(), Error> {
     let temp_data = Contents::from_temp_file(args.path)?.unwrap();
     let adata = match Contents::from_list_file(cwd)? {
         Some(mut data) => {
@@ -40,12 +41,13 @@ pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<()> {
         None => temp_data,
     };
 
-    let adata = adata.prepare_data()?;
-    std::fs::write(LIST_FILENAME, adata.join("\n")).unwrap();
+    if let Ok(adata) = adata.prepare_data() {
+        std::fs::write(LIST_FILENAME, adata.join("\n")).unwrap();
 
-    if !args.ignore_clipboard {
-        let text = adata[..adata.len() - 1].join("\n").trim_end().to_owned();
-        set_clipboard(formats::Unicode, text).expect("To set clipboard");
+        if !args.ignore_clipboard {
+            let text = adata[..adata.len() - 1].join("\n").trim_end().to_owned();
+            set_clipboard(formats::Unicode, text).expect("To set clipboard");
+        }
     }
 
     Ok(())
@@ -64,11 +66,12 @@ type DataMap = HashMap<String, Vec<String>>;
 struct Contents {
     title: String,
     data: DataMap,
+    count: usize,
 }
 
 impl Contents {
     /// Parse temp file from total commander
-    fn from_temp_file(path: String) -> Result<Option<Self>> {
+    fn from_temp_file(path: String) -> Result<Option<Self>, Error> {
         if !path.contains(".tmp") {
             return Err(ErrorKind::NotFound.into());
         }
@@ -113,10 +116,11 @@ impl Contents {
         Ok(Some(Self {
             title: folder_name.to_str().unwrap().into(),
             data,
+            count: 0,
         }))
     }
 
-    fn from_list_file(path: PathBuf) -> Result<Option<Self>> {
+    fn from_list_file(path: PathBuf) -> Result<Option<Self>, Error> {
         let mut path = path.clone();
         path.push(LIST_FILENAME);
         let path = path.to_str().expect("");
@@ -132,21 +136,24 @@ impl Contents {
         };
 
         let mut key = "";
-        let end_offset = file_contents.len()
-            - (if file_contents
-                .last()
-                .unwrap()
-                .contains(METADATA_FOOTER_PREFIX)
-            {
-                1
-            } else {
-                0
-            });
+        let footer = file_contents.last().unwrap();
+        let mut end_offset = file_contents.len();
+        if footer.contains(METADATA_FOOTER_PREFIX) {
+            end_offset.sub_assign(1);
+            contents.count = footer
+                .split(':')
+                .collect::<Vec<_>>()
+                .get(2)
+                .expect("count found at position 2")
+                .to_string()
+                .parse::<usize>()
+                .unwrap_or_default();
+        }
 
         let mut i = 2;
         while i < end_offset {
             let mut line = &file_contents[i];
-            i += 1;
+            i.add_assign(1);
 
             if line == LIST_FILENAME || line.trim_matches(trim_left).is_empty() {
                 continue;
@@ -162,8 +169,8 @@ impl Contents {
                         if !list.contains(&trimmed_line.to_string()) {
                             list.push(trimmed_line.into());
                         }
-                        i += 1;
                         line = &file_contents[i];
+                        i.add_assign(1);
                     }
                 }
             } else {
@@ -194,7 +201,7 @@ impl Contents {
     }
 
     /// Format vec to readable file contents
-    fn prepare_data(self) -> Result<Vec<String>> {
+    fn prepare_data(self) -> Result<Vec<String>, ()> {
         let mut new_contents = vec![self.title];
 
         let mut keys: Vec<String> = self.data.clone().into_keys().collect();
@@ -216,6 +223,10 @@ impl Contents {
                 new_contents.push(line);
                 count += 1;
             })
+        }
+
+        if count == self.count { // no changes
+            return Err(());
         }
 
         let dt = Local::now();
