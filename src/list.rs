@@ -234,9 +234,9 @@ impl Contents {
         new_contents.extend(vec![
             "".into(),
             "".into(),
-            // versioning that might be used for parsing only
             format!(
-                "  {METADATA_FOOTER_PREFIX}{}:{count}:{timestamp}",
+                "/*  {METADATA_FOOTER_PREFIX}{}:{count}:{timestamp}  */",
+                // versioning that in the future might be used for parsing only?
                 Version::v1
             ),
         ]);
