@@ -4,7 +4,7 @@
 use encoding_rs::Encoding;
 use encoding_rs_io::DecodeReaderBytesBuilder;
 use std::io::BufRead;
-use std::{fs::File, io::BufReader, io::Result, path::Path};
+use std::{fs::File, io::BufReader, path::Path};
 
 mod args;
 use args::{Args, Mode};
@@ -12,7 +12,7 @@ use args::{Args, Mode};
 mod list;
 mod version;
 
-fn open_file(path: &str, enc: &'static Encoding) -> Result<Vec<String>> {
+fn open_file(path: &str, enc: &'static Encoding) -> std::io::Result<Vec<String>> {
     match File::open(Path::new(path)) {
         Ok(file) => {
             let reader = DecodeReaderBytesBuilder::new()
@@ -20,14 +20,14 @@ fn open_file(path: &str, enc: &'static Encoding) -> Result<Vec<String>> {
                 .build(file);
             Ok(BufReader::new(reader) //
                 .lines()
-                .map(Result::unwrap)
+                .map(std::io::Result::unwrap)
                 .collect())
         }
         Err(_) => Ok(vec![]),
     }
 }
 
-fn main() -> Result<()> {
+fn main() -> std::io::Result<()> {
     let args = std::env::args().skip(1);
     let args = Args::parse(args);
     let cwd = std::env::current_dir()?;
@@ -38,3 +38,9 @@ fn main() -> Result<()> {
 
     Ok(())
 }
+
+// ----------------------------------------------------------------------------------
+//   - Config -
+// ----------------------------------------------------------------------------------
+static METADATA_FOOTER_PREFIX: &str = "meta:";
+static LIST_FILENAME: &str = "list.txt";

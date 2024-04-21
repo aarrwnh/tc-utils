@@ -12,9 +12,9 @@ use std::{
     path::Path,
 };
 
-use super::open_file;
-use super::version::Version;
-use super::Args;
+use crate::version::Version;
+use crate::Args;
+use crate::*;
 
 pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<(), Error> {
     let temp_data = Contents::from_temp_file(args.path)?.unwrap();
@@ -23,9 +23,9 @@ pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<(), Error> {
             temp_data
                 .data
                 .iter()
-                .for_each(|a| match data.data.get_mut(a.0) {
+                .for_each(|(key, lines)| match data.data.get_mut(key) {
                     Some(b) => {
-                        a.1.iter().for_each(|line| {
+                        lines.iter().for_each(|line| {
                             let line = line.to_owned();
                             if !b.contains(&line) {
                                 b.push(line);
@@ -33,7 +33,7 @@ pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<(), Error> {
                         });
                     }
                     None => {
-                        data.data.insert(a.0.to_owned(), a.1.to_owned());
+                        data.data.insert(key.to_owned(), lines.to_owned());
                     }
                 });
             data
@@ -41,11 +41,24 @@ pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<(), Error> {
         None => temp_data,
     };
 
-    if let Ok(adata) = adata.prepare_data() {
-        std::fs::write(LIST_FILENAME, adata.join("\n")).unwrap();
+    if let Some(adata) = match adata.prepare_data() {
+        Ok((data, Some(err))) => {
+            eprintln!("{err}");
+            Some(data)
+        }
+        Ok((data, None)) => {
+            std::fs::write(LIST_FILENAME, data.join("\n")).unwrap();
+            Some(data)
+        }
+        Err(err) => {
+            eprintln!("{err}");
+            None
+        }
+    } {
+        let text = adata[..adata.len() - 1].join("\n").trim_end().to_owned();
+        println!("{text}");
 
         if !args.ignore_clipboard {
-            let text = adata[..adata.len() - 1].join("\n").trim_end().to_owned();
             set_clipboard(formats::Unicode, text).expect("To set clipboard");
         }
     }
@@ -56,9 +69,6 @@ pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<(), Error> {
 const fn trim_left(c: char) -> bool {
     c == ' ' || c == '\t'
 }
-
-static METADATA_FOOTER_PREFIX: &str = "meta:";
-static LIST_FILENAME: &str = "list.txt";
 
 type DataMap = HashMap<String, Vec<String>>;
 
@@ -125,19 +135,18 @@ impl Contents {
         path.push(LIST_FILENAME);
         let path = path.to_str().expect("");
 
-        let file_contents = open_file(path, encoding_rs::UTF_8)?;
-        if file_contents.is_empty() {
+        let lines = open_file(path, encoding_rs::UTF_8)?;
+        if lines.is_empty() {
             return Ok(None);
         }
 
         let mut contents = Self {
-            title: file_contents.first().expect("title line").to_string(),
+            title: lines.first().expect("title line").to_string(),
             ..Default::default()
         };
 
-        let mut key = "";
-        let footer = file_contents.last().unwrap();
-        let mut end_offset = file_contents.len();
+        let footer = lines.last().unwrap();
+        let mut end_offset = lines.len();
         if footer.contains(METADATA_FOOTER_PREFIX) {
             end_offset.sub_assign(1);
             contents.count = footer
@@ -150,12 +159,16 @@ impl Contents {
                 .unwrap_or_default();
         }
 
-        let mut i = 2;
+        let mut key = "";
+        let mut i = 1;
         while i < end_offset {
-            let mut line = &file_contents[i];
+            let mut line = &lines[i];
             i.add_assign(1);
 
-            if line == LIST_FILENAME || line.trim_matches(trim_left).is_empty() {
+            if *line == contents.title // in old files
+                || line == LIST_FILENAME
+                || line.trim_matches(trim_left).is_empty()
+            {
                 continue;
             }
 
@@ -169,12 +182,13 @@ impl Contents {
                         if !list.contains(&trimmed_line.to_string()) {
                             list.push(trimmed_line.into());
                         }
-                        line = &file_contents[i];
+                        line = &lines[i];
                         i.add_assign(1);
                     }
                 }
             } else {
                 key = &line;
+                // println!("{i} : {key}");
                 contents.data.entry(key.into()).or_default();
             }
         }
@@ -201,7 +215,7 @@ impl Contents {
     }
 
     /// Format vec to readable file contents
-    fn prepare_data(self) -> Result<Vec<String>, ()> {
+    fn prepare_data(self) -> Result<(Vec<String>, Option<Error>), Error> {
         let mut new_contents = vec![self.title];
 
         let mut keys: Vec<String> = self.data.clone().into_keys().collect();
@@ -209,15 +223,15 @@ impl Contents {
 
         let mut count = 0usize;
         for key in keys {
-            let no_key = key.is_empty();
+            let has_key = !key.is_empty();
             new_contents.push("".into()); // add newline
             new_contents.push(key.clone());
             let mut lines = self.data.get(&key).expect("lines").clone();
-            lines.sort();
+            lines.sort(); // TODO: sort by date found on line?
             lines.iter().for_each(|line| {
                 let mut line = line.to_owned().clone();
-                if !no_key {
-                    // add padding if filename has key
+                if has_key {
+                    // add padding
                     line.insert_str(0, "  ");
                 }
                 new_contents.push(line);
@@ -225,8 +239,11 @@ impl Contents {
             })
         }
 
-        if count == self.count { // no changes
-            return Err(());
+        if count == self.count {
+            return Ok((
+                new_contents,
+                Some(Error::new(ErrorKind::Other, "no changes to be made")),
+            ));
         }
 
         let dt = Local::now();
@@ -241,6 +258,6 @@ impl Contents {
             ),
         ]);
 
-        Ok(new_contents)
+        Ok((new_contents, None))
     }
 }
