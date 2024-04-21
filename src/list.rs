@@ -1,7 +1,5 @@
-extern crate chrono;
 use chrono::Local;
-
-extern crate clipboard_win;
+use regex::Regex;
 use clipboard_win::{formats, set_clipboard};
 
 use std::collections::HashMap;
@@ -216,6 +214,9 @@ impl Contents {
 
     /// Format vec to readable file contents
     fn prepare_data(self) -> Result<(Vec<String>, Option<Error>), Error> {
+        let re_date = Regex::new(r"\((\d{4}).(\d{1,2}).(\d{1,2}).?\)").unwrap();
+        let re_chapter_no = Regex::new(r"第?(\d+)話").unwrap();
+
         let mut new_contents = vec![self.title];
 
         let mut keys: Vec<String> = self.data.clone().into_keys().collect();
@@ -227,7 +228,19 @@ impl Contents {
             new_contents.push("".into()); // add newline
             new_contents.push(key.clone());
             let mut lines = self.data.get(&key).expect("lines").clone();
-            lines.sort(); // TODO: sort by date found on line?
+
+            // try very naive sorting
+            lines.sort_by_key(|line| {
+                if let Some(chapter) = re_chapter_no.captures(line) {
+                    return chapter[1].parse::<i32>().unwrap().abs();
+                }
+                if let Some(date) = re_date.captures(line) {
+                    let d = format!("{}{:0>2}{:0>2}", &date[1], &date[2], &date[3]);
+                    return d.parse::<i32>().unwrap().abs();
+                }
+                0
+            });
+
             lines.iter().for_each(|line| {
                 let mut line = line.to_owned().clone();
                 if has_key {
