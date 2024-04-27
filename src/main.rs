@@ -3,33 +3,33 @@
 
 use encoding_rs::Encoding;
 use encoding_rs_io::DecodeReaderBytesBuilder;
-use std::io::BufRead;
-use std::{fs::File, io::BufReader, path::Path};
+use std::{fs::File, io, io::BufRead, path::Path};
 
 mod args;
 use args::{Args, Mode};
 
 mod list;
-mod version;
 
-fn open_file(path: &str, enc: &'static Encoding) -> std::io::Result<Vec<String>> {
+mod version;
+use version::Version;
+
+fn open_file(path: &str, enc: &'static Encoding) -> io::Result<Vec<String>> {
     match File::open(Path::new(path)) {
         Ok(file) => {
             let reader = DecodeReaderBytesBuilder::new()
                 .encoding(Some(enc))
                 .build(file);
-            Ok(BufReader::new(reader) //
+            Ok(io::BufReader::new(reader) //
                 .lines()
-                .map(std::io::Result::unwrap)
+                .map(io::Result::unwrap)
                 .collect())
         }
         Err(_) => Ok(vec![]),
     }
 }
 
-fn main() -> std::io::Result<()> {
-    let args = std::env::args().skip(1);
-    let args = Args::parse(args);
+fn main() -> io::Result<()> {
+    let args = Args::new();
     let cwd = std::env::current_dir()?;
 
     if !args.path.is_empty() && args.mode == Mode::List {
@@ -42,5 +42,5 @@ fn main() -> std::io::Result<()> {
 // ----------------------------------------------------------------------------------
 //   - Config -
 // ----------------------------------------------------------------------------------
-static METADATA_FOOTER_PREFIX: &str = "meta:";
+static INFO_FOOTER_PREFIX: &str = "info:";
 static LIST_FILENAME: &str = "list.txt";

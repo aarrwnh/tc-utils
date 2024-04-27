@@ -12,18 +12,40 @@ pub(crate) struct Args {
     pub ignore_clipboard: bool,
 }
 
-impl Args {
-    pub(crate) fn parse(mut args: impl DoubleEndedIterator<Item = String>) -> Self {
-        let mut output = Self::default();
+fn help() {
+    println!(
+        "USAGE:
+tc-utils PATH
+tc-utils [OPTIONS] --path <string>
+tc-utils [OPTIONS] PATH
 
+MODES: (required)
+    --list
+
+ARGUMENTS:
+    -p, --path <string>
+
+OPTIONS:
+    -c, --ignore-clipboard
+"
+    );
+}
+
+impl Args {
+    pub(crate) fn new() -> Self {
+        Self::parse(std::env::args().skip(1))
+    }
+
+    fn parse(mut args: impl DoubleEndedIterator<Item = String>) -> Self {
         let last = match args.nth_back(0) {
             Some(a) if !a.contains('-') => a,
             _ => {
-                eprintln!("insufficient args");
+                help();
                 std::process::exit(0);
             }
         };
 
+        let mut output = Self::default();
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
             if let Some((name, value)) = match arg.contains('=') {
