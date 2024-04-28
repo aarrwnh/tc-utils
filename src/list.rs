@@ -1,12 +1,13 @@
 use chrono::Local;
 use clipboard_win::{formats, set_clipboard};
+use rand::distributions::{Alphanumeric, DistString};
 use regex::Regex;
 
-use std::collections::HashMap;
-use std::path::PathBuf;
 use std::{
+    collections::HashMap,
+    env, fs,
     io::{Error, ErrorKind},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use crate::*;
@@ -42,7 +43,7 @@ pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<(), Error> {
             Some(data)
         }
         Ok((data, None)) => {
-            std::fs::write(LIST_FILENAME, data.join("\n")).unwrap();
+            fs::write(LIST_FILENAME, data.join("\n")).unwrap();
             Some(data)
         }
         Err(err) => {
@@ -131,6 +132,8 @@ impl Contents {
         if lines.is_empty() {
             return Ok(None);
         }
+
+        backup_file(path)?;
 
         let mut contents = Self {
             label: lines.first().expect("line containing label").to_string(),
@@ -261,4 +264,16 @@ impl Contents {
 
         Ok((new_contents, None))
     }
+}
+
+fn random_string(len: usize) -> String {
+    Alphanumeric.sample_string(&mut rand::thread_rng(), len)
+}
+
+fn backup_file(path: PathBuf) -> io::Result<()> {
+    // TODO?: this is fine as long ramdisk is used
+    let temp_path = env::temp_dir().join("_tc");
+    fs::create_dir_all(&temp_path)?;
+    fs::copy(path, temp_path.join(random_string(8) + "-list.txt.bak"))?;
+    Ok(())
 }
