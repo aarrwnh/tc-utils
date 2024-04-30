@@ -33,7 +33,7 @@ fn main() -> io::Result<()> {
     let cwd = std::env::current_dir()?;
 
     if !args.path.is_empty() && args.mode == Mode::List {
-        list::handler(args, cwd)?;
+        list::handler(&args, cwd)?;
     }
 
     Ok(())

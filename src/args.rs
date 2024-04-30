@@ -1,3 +1,5 @@
+use std::{str::FromStr, string::ParseError};
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Default)]
 pub(crate) enum Mode {
     #[default]
@@ -5,11 +7,32 @@ pub(crate) enum Mode {
     List,
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Default)]
+pub(crate) enum SortStrategy {
+    None = 0,
+    Name,
+    #[default]
+    Date,
+}
+
+impl FromStr for SortStrategy {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "name" => Self::Name,
+            "date" => Self::Date,
+            _ => Self::None,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Args {
     pub path: String,
     pub mode: Mode,
     pub ignore_clipboard: bool,
+    pub sort: SortStrategy,
 }
 
 fn help() {
@@ -24,6 +47,7 @@ MODES: (required)
 
 ARGUMENTS:
     -p, --path <string>
+    --sort=<date|name|none>
 
 OPTIONS:
     -c, --ignore-clipboard
@@ -71,6 +95,9 @@ impl Args {
                     "list" => {
                         output.mode = Mode::List;
                     }
+                    "sort" => {
+                        output.sort = value.unwrap().parse::<_>().unwrap();
+                    }
                     "c" | "ignore-clipboard" => {
                         output.ignore_clipboard = true;
                     }
@@ -102,6 +129,7 @@ mod test {
             path: path.clone(),
             mode: Mode::List,
             ignore_clipboard: true,
+            sort: SortStrategy::Date,
         };
         let ex2 = Args {
             path: path.clone(),

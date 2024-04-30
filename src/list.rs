@@ -10,10 +10,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::*;
+use crate::{args::SortStrategy, *};
 
-pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<(), Error> {
-    let temp_data = Contents::from_temp_file(args.path)?.unwrap();
+pub(crate) fn handler(args: &Args, cwd: PathBuf) -> Result<(), Error> {
+    let temp_data = Contents::from_temp_file(&args.path)?.unwrap();
     let adata = match Contents::from_list_file(cwd)? {
         Some(mut data) => {
             temp_data
@@ -37,7 +37,7 @@ pub(crate) fn handler(args: Args, cwd: PathBuf) -> Result<(), Error> {
         None => temp_data,
     };
 
-    if let Some(adata) = match adata.prepare_data() {
+    if let Some(adata) = match adata.prepare_data(args) {
         Ok((data, Some(err))) => {
             eprintln!("{err}");
             Some(data)
@@ -77,11 +77,11 @@ struct Contents {
 
 impl Contents {
     /// Parse temp file from total commander
-    fn from_temp_file(path: String) -> Result<Option<Self>, Error> {
+    fn from_temp_file(path: &str) -> Result<Option<Self>, Error> {
         if !path.contains(".tmp") {
             return Err(ErrorKind::NotFound.into());
         }
-        let temp_file_contents = open_file(&path, encoding_rs::UTF_16LE)?;
+        let temp_file_contents = open_file(path, encoding_rs::UTF_16LE)?;
         if temp_file_contents.is_empty() {
             return Err(ErrorKind::UnexpectedEof.into());
         }
@@ -209,14 +209,15 @@ impl Contents {
     }
 
     /// Format vec to readable file contents
-    fn prepare_data(self) -> Result<(Vec<String>, Option<Error>), Error> {
-        let re_date = Regex::new(r"\((\d{4}).(\d{1,2}).(\d{1,2}).?\)").unwrap();
-        let re_chapter_no = Regex::new(r"第?(\d+)話").unwrap();
-
+    fn prepare_data(self, args: &Args) -> Result<(Vec<String>, Option<Error>), Error> {
         let mut new_contents = vec![self.label];
 
         let mut keys: Vec<String> = self.data.clone().into_keys().collect();
-        keys.sort_by_key(|k| k == "<>"); // move with no key to bottom
+        // keys.sort_by_key(|k| k == "<>"); // move with no key to bottom
+        keys.sort();
+        println!("keys={:?}", keys);
+
+        let sorter = Sorter::new();
 
         let mut count = 0usize;
         for key in keys {
@@ -225,17 +226,7 @@ impl Contents {
             new_contents.push(key.clone());
             let mut lines = self.data.get(&key).expect("lines").clone();
 
-            // try very naive sorting
-            lines.sort_by_key(|line| {
-                if let Some(chapter) = re_chapter_no.captures(line) {
-                    return chapter[1].parse::<i32>().unwrap().abs();
-                }
-                if let Some(date) = re_date.captures(line) {
-                    let d = format!("{}{:0>2}{:0>2}", &date[1], &date[2], &date[3]);
-                    return d.parse::<i32>().unwrap().abs();
-                }
-                0
-            });
+            sorter.sort(&mut lines, &args.sort);
 
             lines.iter().for_each(|line| {
                 let mut line = line.to_owned().clone();
@@ -266,6 +257,49 @@ impl Contents {
     }
 }
 
+struct Sorter(HashMap<SortStrategy, Result<Regex, regex::Error>>);
+
+/// No idea where I'm going with this.
+impl Sorter {
+    fn new() -> Self {
+        use SortStrategy::*;
+        Self(HashMap::from([
+            (Date, re(r"\((\d{4}).(\d{1,2}).(\d{1,2}).?\)")),
+            (None, re(r"第?(\d+)話")),
+        ]))
+    }
+
+    /// try very naive sorting
+    fn sort(&self, lines: &mut [String], strategy: &SortStrategy) {
+        use SortStrategy::*;
+        if *strategy == Name {
+            lines.sort();
+        } else {
+            lines.sort_by_key(|line| {
+                match strategy {
+                    Name => {}
+                    None => {
+                        if let Some(chapter) = self.get_re(&None).captures(line) {
+                            return chapter[1].parse::<i32>().unwrap().abs();
+                        }
+                    }
+                    Date => {
+                        if let Some(date) = self.get_re(&Date).captures(line) {
+                            let d = format!("{}{:0>2}{:0>2}", &date[1], &date[2], &date[3]);
+                            return d.parse::<i32>().unwrap().abs();
+                        }
+                    }
+                }
+                0
+            });
+        }
+    }
+
+    fn get_re(&self, strategy: &SortStrategy) -> &Regex {
+        self.0.get(strategy).unwrap().as_ref().unwrap()
+    }
+}
+
 fn random_string(len: usize) -> String {
     Alphanumeric.sample_string(&mut rand::thread_rng(), len)
 }
@@ -276,4 +310,8 @@ fn backup_file(path: PathBuf) -> io::Result<()> {
     fs::create_dir_all(&temp_path)?;
     fs::copy(path, temp_path.join(random_string(8) + "-list.txt.bak"))?;
     Ok(())
+}
+
+fn re(pattern: &str) -> Result<Regex, regex::Error> {
+    Regex::new(pattern)
 }
