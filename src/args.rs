@@ -7,10 +7,12 @@ pub(crate) enum Mode {
     List,
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Default)]
+#[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Default)]
 pub(crate) enum SortStrategy {
     None = 0,
+    /// Normal sort?
     Name,
+    /// Sort by found date.
     #[default]
     Date,
 }
@@ -33,6 +35,8 @@ pub(crate) struct Args {
     pub mode: Mode,
     pub ignore_clipboard: bool,
     pub sort: SortStrategy,
+
+    pub dry_run: bool,
 }
 
 fn help() {
@@ -51,6 +55,7 @@ ARGUMENTS:
 
 OPTIONS:
     -c, --ignore-clipboard
+    --dry-run
 "
     );
 }
@@ -101,6 +106,9 @@ impl Args {
                     "c" | "ignore-clipboard" => {
                         output.ignore_clipboard = true;
                     }
+                    "dry-run" => {
+                        output.dry_run = true;
+                    }
                     _ => {}
                 };
             }
@@ -130,6 +138,7 @@ mod test {
             mode: Mode::List,
             ignore_clipboard: true,
             sort: SortStrategy::Date,
+            dry_run: false,
         };
         let ex2 = Args {
             path: path.clone(),

@@ -43,7 +43,9 @@ pub(crate) fn handler(args: &Args, cwd: PathBuf) -> Result<(), Error> {
             Some(data)
         }
         Ok((data, None)) => {
-            fs::write(LIST_FILENAME, data.join("\n")).unwrap();
+            if !args.dry_run {
+                fs::write(LIST_FILENAME, data.join("\n")).unwrap();
+            }
             Some(data)
         }
         Err(err) => {
@@ -126,14 +128,16 @@ impl Contents {
         }))
     }
 
-    fn from_list_file(path: PathBuf) -> Result<Option<Self>, Error> {
+    fn from_list_file(path: PathBuf, args: &Args) -> Result<Option<Self>, Error> {
         let path = path.join(LIST_FILENAME);
         let lines = open_file(path.to_str().unwrap(), encoding_rs::UTF_8)?;
         if lines.is_empty() {
             return Ok(None);
         }
 
-        backup_file(path)?;
+        if !args.dry_run {
+            backup_file(path)?;
+        }
 
         let mut contents = Self {
             label: lines.first().expect("line containing label").to_string(),
