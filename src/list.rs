@@ -6,15 +6,15 @@ use regex::Regex;
 use std::{
     collections::HashMap,
     env, fs,
-    io::{Error, ErrorKind},
     path::{Path, PathBuf},
 };
 
 use crate::{args::SortStrategy, *};
+use crate::{Error, Result};
 
-pub(crate) fn handler(args: &Args, cwd: PathBuf) -> Result<(), Error> {
+pub(crate) fn handler(args: &Args, cwd: PathBuf) -> Result<()> {
     let temp_data = Contents::from_temp_file(&args.path)?.unwrap();
-    let adata = match Contents::from_list_file(cwd)? {
+    let adata = match Contents::from_list_file(cwd, args)? {
         Some(mut data) => {
             temp_data
                 .data
@@ -54,9 +54,8 @@ pub(crate) fn handler(args: &Args, cwd: PathBuf) -> Result<(), Error> {
         }
     } {
         let text = adata[..adata.len() - 1].join("\n").trim_end().to_owned();
-        println!("{text}");
-
         if !args.ignore_clipboard {
+            println!("{text}");
             set_clipboard(formats::Unicode, text).expect("To set clipboard");
         }
     }
@@ -79,13 +78,13 @@ struct Contents {
 
 impl Contents {
     /// Parse temp file from total commander
-    fn from_temp_file(path: &str) -> Result<Option<Self>, Error> {
+    fn from_temp_file(path: &str) -> Result<Option<Self>> {
         if !path.contains(".tmp") {
-            return Err(ErrorKind::NotFound.into());
+            return Err(Error::NotFound);
         }
         let temp_file_contents = open_file(path, encoding_rs::UTF_16LE)?;
         if temp_file_contents.is_empty() {
-            return Err(ErrorKind::UnexpectedEof.into());
+            return Err(Error::UnexpectedEof);
         }
         let folder_name = temp_file_contents
             .first()
@@ -128,9 +127,10 @@ impl Contents {
         }))
     }
 
-    fn from_list_file(path: PathBuf, args: &Args) -> Result<Option<Self>, Error> {
+    fn from_list_file(path: PathBuf, args: &Args) -> Result<Option<Self>> {
         let path = path.join(LIST_FILENAME);
         let lines = open_file(path.to_str().unwrap(), encoding_rs::UTF_8)?;
+
         if lines.is_empty() {
             return Ok(None);
         }
@@ -186,7 +186,7 @@ impl Contents {
                     }
                 }
             } else {
-                key = &line;
+                key = line;
                 contents.data.entry(key.into()).or_default();
             }
         }
@@ -213,13 +213,12 @@ impl Contents {
     }
 
     /// Format vec to readable file contents
-    fn prepare_data(self, args: &Args) -> Result<(Vec<String>, Option<Error>), Error> {
+    fn prepare_data(self, args: &Args) -> Result<(Vec<String>, Option<Error>)> {
         let mut new_contents = vec![self.label];
 
         let mut keys: Vec<String> = self.data.clone().into_keys().collect();
         // keys.sort_by_key(|k| k == "<>"); // move with no key to bottom
         keys.sort();
-        println!("keys={:?}", keys);
 
         let sorter = Sorter::new();
 
@@ -244,10 +243,7 @@ impl Contents {
         }
 
         if count == self.count {
-            return Ok((
-                new_contents,
-                Some(Error::new(ErrorKind::Other, "no changes to be made")),
-            ));
+            return Ok((new_contents, Some(Error::NoChange)));
         }
 
         new_contents.push(format!(
@@ -268,7 +264,7 @@ impl Sorter {
     fn new() -> Self {
         use SortStrategy::*;
         Self(HashMap::from([
-            (Date, re(r"\((\d{4}).(\d{1,2}).(\d{1,2}).?\)")),
+            (Date, re(r"\((\d{4}).(\d{1,2}).(\d{1,2}).?\)?")),
             (None, re(r"第?(\d+)話")),
         ]))
     }

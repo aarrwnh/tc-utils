@@ -13,7 +13,10 @@ mod list;
 mod version;
 use version::Version;
 
-fn open_file(path: &str, enc: &'static Encoding) -> io::Result<Vec<String>> {
+mod error;
+use error::{Result, Error};
+
+fn open_file(path: &str, enc: &'static Encoding) -> Result<Vec<String>> {
     match File::open(Path::new(path)) {
         Ok(file) => {
             let reader = DecodeReaderBytesBuilder::new()
@@ -28,7 +31,7 @@ fn open_file(path: &str, enc: &'static Encoding) -> io::Result<Vec<String>> {
     }
 }
 
-fn main() -> io::Result<()> {
+fn main() -> Result<()> {
     let args = Args::new();
     let cwd = std::env::current_dir()?;
 
