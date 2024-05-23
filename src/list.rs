@@ -90,7 +90,10 @@ impl Contents {
             .first()
             .map(|path| Path::new(path).components().nth_back(1).unwrap())
             .unwrap()
-            .as_os_str();
+            .as_os_str()
+            .to_str()
+            .unwrap()
+            .to_string();
 
         let mut data: DataMap = HashMap::new();
         temp_file_contents.iter().for_each(|path| {
@@ -102,7 +105,10 @@ impl Contents {
                 p.file_name()
             } else {
                 p.file_stem()
-            }.unwrap().to_str().unwrap();
+            }
+            .unwrap()
+            .to_str()
+            .unwrap();
 
             let mut parts = filename.split('｜');
             let (key, subtitle) = match parts.clone().count() {
@@ -113,7 +119,8 @@ impl Contents {
                 _ => {
                     let mag = parts.next().unwrap();
                     let sub = parts.last().unwrap();
-                    (mag.to_string(), sub.to_string())
+                    let sub = sub.trim_start_matches(&folder_name).to_string();
+                    (mag.to_string(), sub)
                 }
             };
 
@@ -127,7 +134,7 @@ impl Contents {
             };
         });
         Ok(Some(Self {
-            label: folder_name.to_str().unwrap().into(),
+            label: folder_name,
             data,
             count: 0,
         }))
