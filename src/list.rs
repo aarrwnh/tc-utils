@@ -97,7 +97,13 @@ impl Contents {
             if path.contains(LIST_FILENAME) {
                 return;
             }
-            let filename = Path::new(path).file_stem().unwrap().to_str().unwrap();
+            let p = Path::new(path);
+            let filename = if p.is_dir() {
+                p.file_name()
+            } else {
+                p.file_stem()
+            }.unwrap().to_str().unwrap();
+
             let mut parts = filename.split('｜');
             let (key, subtitle) = match parts.clone().count() {
                 1 => {
