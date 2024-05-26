@@ -124,6 +124,8 @@ impl Contents {
                 }
             };
 
+            let subtitle = subtitle.trim_matches(trim_left).to_owned();
+
             match data.get_mut(&key) {
                 Some(set) => {
                     set.push(subtitle);
