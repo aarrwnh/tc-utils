@@ -235,11 +235,14 @@ impl Contents {
 
         let sorter = Sorter::new();
 
+        let one_key = keys.len() == 1 && keys[0] == "<>";
         let mut count = 0usize;
         for key in keys {
             let has_key = !key.is_empty();
-            new_contents.push("".into()); // add newline
-            new_contents.push(key.clone());
+            if !one_key {
+                new_contents.push("".into()); // add newline
+                new_contents.push(key.clone());
+            }
             let mut lines = self.data.get(&key).expect("lines").clone();
 
             sorter.sort(&mut lines, &args.sort);
