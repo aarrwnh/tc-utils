@@ -235,8 +235,6 @@ impl Contents {
         // keys.sort_by_key(|k| k == "<>"); // move with no key to bottom
         keys.sort();
 
-        let sorter = Sorter::new();
-
         let one_key = keys.len() == 1 && keys[0] == "<>";
         let mut count = 0usize;
         for key in keys {
@@ -247,7 +245,7 @@ impl Contents {
             }
             let mut lines = self.data.get(&key).expect("lines").clone();
 
-            sorter.sort(&mut lines, &args.sort);
+            sort(&mut lines, &args.sort);
 
             lines.iter().for_each(|line| {
                 let mut line = line.to_owned().clone();
@@ -275,46 +273,37 @@ impl Contents {
     }
 }
 
-struct Sorter(HashMap<SortStrategy, Result<Regex, regex::Error>>);
-
-/// No idea where I'm going with this.
-impl Sorter {
-    fn new() -> Self {
-        use SortStrategy::*;
-        Self(HashMap::from([
-            (Date, re(r"\((\d{4}).(\d{1,2}).(\d{1,2}).?\)?")),
-            (None, re(r"第?(\d+)話")),
-        ]))
-    }
-
-    /// try very naive sorting
-    fn sort(&self, lines: &mut [String], strategy: &SortStrategy) {
-        use SortStrategy::*;
-        if *strategy == Name {
-            lines.sort();
-        } else {
-            lines.sort_by_key(|line| {
-                match strategy {
-                    Name => {}
-                    None => {
-                        if let Some(chapter) = self.get_re(&None).captures(line) {
-                            return chapter[1].parse::<i32>().unwrap().abs();
-                        }
-                    }
-                    Date => {
-                        if let Some(date) = self.get_re(&Date).captures(line) {
-                            let d = format!("{}{:0>2}{:0>2}", &date[1], &date[2], &date[3]);
-                            return d.parse::<i32>().unwrap().abs();
-                        }
+/// try very naive sorting
+fn sort(lines: &mut [String], strategy: &SortStrategy) {
+    use SortStrategy::*;
+    if *strategy == Name {
+        lines.sort();
+    } else {
+        let mut sorted = false;
+        lines.sort_unstable_by_key(|line| {
+            let a = line.to_ascii_lowercase();
+            match strategy {
+                Name => {}
+                None => {
+                    if let Some(chapter) = RE_CHAPTER.captures(line) {
+                        sorted = true;
+                        return (chapter[1].parse::<i32>().unwrap().abs(), a);
                     }
                 }
-                0
-            });
-        }
-    }
+                Date => {
+                    if let Some(date) = RE_DATE.captures(line) {
+                        let d = format!("{}{:0>2}{:0>2}", &date[1], &date[2], &date[3]);
+                        sorted = true;
+                        return (d.parse::<i32>().unwrap().abs(), a);
+                    }
+                }
+            }
+            (0, a)
+        });
 
-    fn get_re(&self, strategy: &SortStrategy) -> &Regex {
-        self.0.get(strategy).unwrap().as_ref().unwrap()
+        if !sorted {
+            lines.sort();
+        }
     }
 }
 
