@@ -1,16 +1,22 @@
 use chrono::Local;
 use clipboard_win::{formats, set_clipboard};
+use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 use regex::Regex;
 
 use std::{
     collections::HashMap,
-    env, fs,
+    env,
+    fs::{self},
     path::{Path, PathBuf},
 };
 
 use crate::{args::SortStrategy, *};
 use crate::{Error, Result};
+
+static RE_DATE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\((\d{4}).(\d{1,2}).(\d{1,2}).?\)?").unwrap());
+static RE_CHAPTER: Lazy<Regex> = Lazy::new(|| Regex::new(r"第?(\d+)話").unwrap());
 
 pub(crate) fn handler(args: &Args, cwd: PathBuf) -> Result<()> {
     let temp_data = Contents::from_temp_file(&args.path)?.unwrap();
@@ -38,13 +44,13 @@ pub(crate) fn handler(args: &Args, cwd: PathBuf) -> Result<()> {
     };
 
     if let Some(adata) = match adata.prepare_data(args) {
-        Ok((data, Some(err))) => {
+        Ok((data, Some(err), _)) => {
             eprintln!("{err}");
             Some(data)
         }
-        Ok((data, None)) => {
+        Ok((data, None, output)) => {
             if !args.dry_run {
-                fs::write(LIST_FILENAME, data.join("\n")).unwrap();
+                fs::write(output.to_filename(), data.join("\n")).unwrap();
             }
             Some(data)
         }
@@ -97,7 +103,7 @@ impl Contents {
 
         let mut data: DataMap = HashMap::new();
         temp_file_contents.iter().for_each(|path| {
-            if path.contains(LIST_FILENAME) {
+            if list_in_line(path) {
                 return;
             }
             let p = Path::new(path);
@@ -143,7 +149,7 @@ impl Contents {
     }
 
     fn from_list_file(path: PathBuf, args: &Args) -> Result<Option<Self>> {
-        let path = path.join(LIST_FILENAME);
+        let path = path.join(Output::LIST_FILENAME.join("."));
         let lines = open_file(path.to_str().unwrap(), encoding_rs::UTF_8)?;
 
         if lines.is_empty() {
@@ -175,12 +181,13 @@ impl Contents {
 
         let mut key = "";
         let mut i = 1;
+
         while i < end_offset {
             let mut line = &lines[i];
             i += 1;
 
             if *line == contents.label // in old files
-                || line == LIST_FILENAME
+                || list_in_line(line)
                 || line.trim_matches(trim_left).is_empty()
             {
                 continue;
@@ -228,7 +235,7 @@ impl Contents {
     }
 
     /// Format vec to readable file contents
-    fn prepare_data(self, args: &Args) -> Result<(Vec<String>, Option<Error>)> {
+    fn prepare_data(self, args: &Args) -> Result<(Vec<String>, Option<Error>, Output)> {
         let mut new_contents = vec![self.label];
 
         let mut keys: Vec<String> = self.data.clone().into_keys().collect();
@@ -260,18 +267,23 @@ impl Contents {
             })
         }
 
+        let filelist = Output::find_list_file();
+        let output = match filelist.len() {
+            1 => filelist.last().unwrap().clone(),
+            _ => Output::default(),
+        };
+
         if count == self.count {
-            return Ok((new_contents, Some(Error::NoChange)));
+            return Ok((new_contents, Some(Error::NoChange), output));
         }
 
         new_contents.push(format!(
             "\n\n/*  {INFO_FOOTER_PREFIX}{version},{count},{timestamp}  */",
-            // versioning that in the future might be used for parsing only?
-            version = Version::v1,
+            version = output.get_version(),
             timestamp = Local::now().format("%Y-%m-%d_%H:%M:%S")
         ));
 
-        Ok((new_contents, None))
+        Ok((new_contents, None, output))
     }
 }
 
@@ -313,14 +325,15 @@ fn random_string(len: usize) -> String {
     Alphanumeric.sample_string(&mut rand::thread_rng(), len)
 }
 
+fn list_in_line(s: &str) -> bool {
+    let [f, e] = Output::LIST_FILENAME;
+    s.contains(f) && s.contains(&(".".to_string() + e))
+}
+
 fn backup_file(path: PathBuf) -> io::Result<()> {
     // TODO?: this is fine as long ramdisk is used
     let temp_path = env::temp_dir().join("_tc");
     fs::create_dir_all(&temp_path)?;
     fs::copy(path, temp_path.join(random_string(8) + "-list.txt.bak"))?;
     Ok(())
-}
-
-fn re(pattern: &str) -> Result<Regex, regex::Error> {
-    Regex::new(pattern)
 }

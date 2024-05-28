@@ -11,7 +11,7 @@ use args::{Args, Mode};
 mod list;
 
 mod version;
-use version::Version;
+use version::Output;
 
 mod error;
 use error::{Result, Error};
@@ -46,4 +46,3 @@ fn main() -> Result<()> {
 //   - Config -
 // ----------------------------------------------------------------------------------
 static INFO_FOOTER_PREFIX: &str = "info:";
-static LIST_FILENAME: &str = "list.txt";
