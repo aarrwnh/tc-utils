@@ -253,8 +253,10 @@ impl Contents {
                     // add padding
                     line.insert_str(0, "  ");
                 }
-                new_contents.push(line);
-                count += 1;
+                if !new_contents.contains(&line) {
+                    new_contents.push(line);
+                    count += 1;
+                }
             })
         }
 
