@@ -103,7 +103,7 @@ impl Contents {
 
         let mut data: DataMap = HashMap::new();
         temp_file_contents.iter().for_each(|path| {
-            if list_in_line(path) {
+            if Output::list_in_line(path) {
                 return;
             }
             let p = Path::new(path);
@@ -149,15 +149,20 @@ impl Contents {
     }
 
     fn from_list_file(path: PathBuf, args: &Args) -> Result<Option<Self>> {
-        let path = path.join(Output::LIST_FILENAME.join("."));
-        let lines = open_file(path.to_str().unwrap(), encoding_rs::UTF_8)?;
+        let files = Output::find_list_file(path);
+        let path = match files.last() {
+            Some(last) => last.to_owned(),
+            None => Output::default(),
+        }
+        .to_filename();
+        let lines = open_file(&path, encoding_rs::UTF_8)?;
 
         if lines.is_empty() {
             return Ok(None);
         }
 
         if !args.dry_run {
-            backup_file(path)?;
+            backup_file(&path)?;
         }
 
         let mut contents = Self {
@@ -187,7 +192,7 @@ impl Contents {
             i += 1;
 
             if *line == contents.label // in old files
-                || list_in_line(line)
+                || Output::list_in_line(line)
                 || line.trim_matches(trim_left).is_empty()
             {
                 continue;
@@ -267,7 +272,7 @@ impl Contents {
             })
         }
 
-        let filelist = Output::find_list_file();
+        let filelist = Output::find_list_file(".");
         let output = match filelist.len() {
             1 => filelist.last().unwrap().clone(),
             _ => Output::default(),
@@ -325,12 +330,7 @@ fn random_string(len: usize) -> String {
     Alphanumeric.sample_string(&mut rand::thread_rng(), len)
 }
 
-fn list_in_line(s: &str) -> bool {
-    let [f, e] = Output::LIST_FILENAME;
-    s.contains(f) && s.contains(&(".".to_string() + e))
-}
-
-fn backup_file(path: PathBuf) -> io::Result<()> {
+fn backup_file(path: &String) -> io::Result<()> {
     // TODO?: this is fine as long ramdisk is used
     let temp_path = env::temp_dir().join("_tc");
     fs::create_dir_all(&temp_path)?;

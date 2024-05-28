@@ -38,15 +38,20 @@ impl Output {
         format!("list{}{}.txt", if ver.is_empty() { "" } else { "." }, ver)
     }
 
-    pub fn find_list_file() -> Vec<Self> {
-        std::fs::read_dir(".")
+    pub fn find_list_file<P>(p: P) -> Vec<Self>
+    where
+        P: AsRef<std::path::Path>,
+    {
+        let [filename, extension] = Self::LIST_FILENAME;
+        let filename = &(filename.to_string() + ".");
+        std::fs::read_dir(p)
             .expect("current dir list")
             .filter_map(|e| {
                 let e = e.as_ref().unwrap();
                 let path = e.path();
                 if let Some(ext) = path.extension() {
                     let s = e.file_name().into_string().unwrap();
-                    if ext == "txt" && s.contains("list") {
+                    if ext == extension && s.contains(filename) {
                         return Some(Output::from(s));
                     } else {
                         return None;
@@ -55,6 +60,11 @@ impl Output {
                 None
             })
             .collect::<Vec<_>>()
+    }
+
+    pub fn list_in_line(s: &str) -> bool {
+        let [f, e] = Self::LIST_FILENAME;
+        s.contains(f) && s.contains(&(".".to_string() + e))
     }
 }
 
