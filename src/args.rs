@@ -9,12 +9,14 @@ pub(crate) enum Mode {
 
 #[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Default)]
 pub(crate) enum SortStrategy {
+    #[default]
     None = 0,
-    /// Normal sort?
+    /// Use `alphanumeric_sort` crate.
     Name,
     /// Sort by found date.
-    #[default]
     Date,
+    /// Sort by found chapter regex.
+    Chapter,
 }
 
 impl FromStr for SortStrategy {
@@ -24,6 +26,7 @@ impl FromStr for SortStrategy {
         Ok(match s {
             "name" => Self::Name,
             "date" => Self::Date,
+            "chapter" => Self::Chapter,
             _ => Self::None,
         })
     }
@@ -51,7 +54,7 @@ MODES: (required)
 
 ARGUMENTS:
     -p, --path <string>
-    --sort=<date|name|none>
+    --sort=<none|date|name>
 
 OPTIONS:
     -c, --ignore-clipboard
@@ -137,7 +140,7 @@ mod test {
             path: path.clone(),
             mode: Mode::List,
             ignore_clipboard: true,
-            sort: SortStrategy::Date,
+            sort: SortStrategy::None,
             dry_run: false,
         };
         let ex2 = Args {

@@ -1,18 +1,11 @@
-use std::path::PathBuf;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Output {
-    /// file version:
-    /// list.txt -- old v0
-    /// list.v1.txt -- new format
-    version: String,
     filename: String,
 }
 
 impl Default for Output {
     fn default() -> Self {
         Self {
-            version: "v1".into(),
             filename: Self::LIST_FILENAME.join("."),
         }
     }
@@ -21,23 +14,15 @@ impl Default for Output {
 impl Output {
     pub const LIST_FILENAME: [&'static str; 2] = ["list", "txt"];
 
-    fn new(version: String, filename: String) -> Self {
-        Self { version, filename }
+    fn new(filename: String) -> Self {
+        Self { filename }
     }
 
-    pub fn get_version(&self) -> &String {
-        &self.version
+    pub fn filename(&self) -> &str {
+        "list.txt"
     }
 
-    fn set_version(&mut self, s: String) {
-        self.version = s;
-    }
-
-    pub fn to_filename(&self) -> String {
-        let ver = self.get_version();
-        format!("list{}{}.txt", if ver.is_empty() { "" } else { "." }, ver)
-    }
-
+    /// Find `list.txt` file inside input directory.
     pub fn find_list_file<P>(p: P) -> Vec<Self>
     where
         P: AsRef<std::path::Path>,
@@ -52,7 +37,7 @@ impl Output {
                 if let Some(ext) = path.extension() {
                     let s = e.file_name().into_string().unwrap();
                     if ext == extension && s.contains(filename) {
-                        return Some(Output::from(s));
+                        return Some(Output::new(s));
                     } else {
                         return None;
                     }
@@ -68,21 +53,15 @@ impl Output {
     }
 }
 
-impl From<String> for Output {
-    fn from(value: String) -> Self {
-        let mut v = Self::new("".into(), value.clone());
-        match PathBuf::from(value.to_owned())
-            .with_extension("") // remove .txt
-            .extension()
-        {
-            Some(ext) => match ext.to_string_lossy().to_string().as_str() {
-                ver @ "v1" => {
-                    v.set_version(ver.into());
-                }
-                _ => {}
-            },
-            _ => {}
-        };
-        v
-    }
-}
+// impl From<String> for Output {
+//     fn from(value: String) -> Self {
+//         let path = PathBuf::from(&value).with_extension(""); // remove .txt
+//         let Some(ext) = path.extension() else {
+//             panic!()
+//         };
+//         let ver = ext.to_string_lossy().to_string();
+//         let ver = ver.as_str();
+//         let ver = if ver == "v1" { ver } else { "" };
+//         Self::new(ver.into(), value)
+//     }
+// }

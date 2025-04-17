@@ -50,7 +50,7 @@ pub(crate) fn handler(args: &Args, cwd: PathBuf) -> Result<()> {
         }
         Ok((data, None, output)) => {
             if !args.dry_run {
-                fs::write(output.to_filename(), data.join("\n")).unwrap();
+                fs::write(output.filename(), data.join("\n")).unwrap();
             }
             Some(data)
         }
@@ -153,16 +153,16 @@ impl Contents {
         let path = match files.last() {
             Some(last) => last.to_owned(),
             None => Output::default(),
-        }
-        .to_filename();
-        let lines = open_file(&path, encoding_rs::UTF_8)?;
+        };
+        let path = path.filename();
+        let lines = open_file(path, encoding_rs::UTF_8)?;
 
         if lines.is_empty() {
             return Ok(None);
         }
 
         if !args.dry_run {
-            backup_file(&path)?;
+            backup_file(path)?;
         }
 
         let mut contents = Self {
@@ -239,7 +239,7 @@ impl Contents {
         Ok(Some(contents))
     }
 
-    /// Format vec to readable file contents
+    /// Format current data to a readable text
     fn prepare_data(self, args: &Args) -> Result<(Vec<String>, Option<Error>, Output)> {
         let mut new_contents = vec![self.label];
 
@@ -252,8 +252,7 @@ impl Contents {
         for key in keys {
             let has_key = !key.is_empty();
             if !one_key {
-                new_contents.push("".into()); // add newline
-                new_contents.push(key.clone());
+                new_contents.push(format!("\n{}", key));
             }
             let mut lines = self.data.get(&key).expect("lines").clone();
 
@@ -283,8 +282,7 @@ impl Contents {
         }
 
         new_contents.push(format!(
-            "\n\n/*  {INFO_FOOTER_PREFIX}{version},{count},{timestamp}  */",
-            version = output.get_version(),
+            "\n\n/*  {INFO_FOOTER_PREFIX}{count},{timestamp}  */",
             timestamp = Local::now().format("%Y-%m-%d_%H:%M:%S")
         ));
 
@@ -294,43 +292,43 @@ impl Contents {
 
 /// try very naive sorting
 fn sort(lines: &mut [String], strategy: &SortStrategy) {
-    use SortStrategy::*;
-    if *strategy == Name {
-        lines.sort();
-    } else {
-        let mut sorted = false;
-        lines.sort_unstable_by_key(|line| {
-            let a = line.to_ascii_lowercase();
-            match strategy {
-                Name => {}
-                None => {
-                    if let Some(chapter) = RE_CHAPTER.captures(line) {
-                        sorted = true;
-                        return (chapter[1].parse::<i32>().unwrap().abs(), a);
-                    }
-                }
-                Date => {
-                    if let Some(date) = RE_DATE.captures(line) {
-                        let d = format!("{}{:0>2}{:0>2}", &date[1], &date[2], &date[3]);
-                        sorted = true;
-                        return (d.parse::<i32>().unwrap().abs(), a);
-                    }
-                }
-            }
-            (0, a)
-        });
-
-        if !sorted {
-            lines.sort();
+    match strategy {
+        SortStrategy::None => {}
+        SortStrategy::Name => {
+            alphanumeric_sort::sort_str_slice(lines);
         }
-    }
+        SortStrategy::Chapter => {
+            lines.sort_by_key(|line| {
+                let a = line.to_ascii_lowercase();
+                if let Some(chapter) = RE_CHAPTER.captures(line) {
+                    (chapter[1].parse::<i32>().unwrap().abs(), a)
+                } else {
+                    (0, a)
+                }
+            });
+        }
+        SortStrategy::Date => {
+            lines.sort_by_key(|line| {
+                let a = line.to_ascii_lowercase();
+                match RE_DATE.captures(line) {
+                    Some(date) => {
+                        let d = format!("{}{:0>2}{:0>2}", &date[1], &date[2], &date[3]);
+                        // => yyyymmdd
+                        (d.parse::<i32>().unwrap().abs(), a)
+                    }
+                    None => (0, a),
+                }
+            });
+        }
+    };
 }
 
 fn random_string(len: usize) -> String {
     Alphanumeric.sample_string(&mut rand::thread_rng(), len)
 }
 
-fn backup_file(path: &String) -> io::Result<()> {
+fn backup_file<P: AsRef<str>>(path: P) -> io::Result<()> {
+    let path = path.as_ref();
     // TODO?: this is fine as long ramdisk is used
     let temp_path = env::temp_dir().join("_tc");
     fs::create_dir_all(&temp_path)?;
